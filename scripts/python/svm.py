@@ -213,9 +213,9 @@ def main():
         print("Reading tf-idf Features")
         tfidf_X, tfidf_y = read_data(args.tfidf_csv)
         print(tfidf_X.shape)
-        tfidf_X, _ = select_features(tfidf_X, tfidf_y,
-                                  args.tfidf_keep_percentage,
-                                  features_outfile=args.tfidf_features_outfile)
+        tfidf_X, tfidf_feats = select_features(tfidf_X, tfidf_y,
+                                                args.tfidf_keep_percentage,
+                                                features_outfile=args.tfidf_features_outfile)
         print(tfidf_X.shape)
         run_classifier(tfidf_X, tfidf_y, args.classifier,
                        args.kernel, args.loss_func,
