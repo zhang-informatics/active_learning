@@ -8,6 +8,7 @@ Link: **TBD**
 
 ## Getting Started
 These instructions will show you how to get the code running on your system in order to recreate the results from the paper.
+See also [Example.ipynb](Example.ipynb) for example code.
 
 ### Prerequisites
 * [Python 3](www.python.org/downloads)
