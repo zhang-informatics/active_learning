@@ -5,7 +5,7 @@ QueryStrategy instance, and a Data instance.
 """
 
 import numpy as np
-from sklearn import model_selection, metrics
+from sklearn import base, metrics, model_selection
 
 from .containers import Data
 from .querystrategies import QueryStrategy, SimpleMargin
@@ -22,7 +22,7 @@ class ActiveLearningModel(object):
         :param int random_state: Sets the random_state parameter of train_test_split.
         '''
         self.__check_args(classifier, query_strategy, U_proportion)
-        self.classifier = classifier
+        self.classifier = base.clone(classifier)
         self.query_strategy = query_strategy
         self.U_proportion = U_proportion
         self.random_state = random_state

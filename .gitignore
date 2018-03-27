@@ -2,3 +2,4 @@ __pycache__
 data/
 docs/
 .DS_Store
+.ipynb_checkpoints/
