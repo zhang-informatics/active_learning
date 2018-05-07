@@ -18,6 +18,56 @@ from sklearn.model_selection import cross_val_score, GridSearchCV, StratifiedKFo
 from sklearn.feature_extraction import DictVectorizer
 from sklearn.feature_selection import SelectPercentile, f_classif, chi2
 
+from platt_svm import PlattScaledSVM
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--semmeddb_csv", type=str, required=True,
+                        help="CSV file containing SemmedDB features.")
+    parser.add_argument("--tfidf_csv", type=str, required=True,
+                        help="CSV file containing Tf-idf features.")
+    parser.add_argument("--run_semmed", action="store_true", default=False,
+                        help="Run SVM with SemmedDB features.")
+    parser.add_argument("--run_tfidf", action="store_true", default=False,
+                        help="Run SVM with Tf-idf features.")
+    parser.add_argument("--run_comb", action="store_true", default=False,
+                        help="""Run SVM with SemmedDB and Tf-idf features.
+                                Specify SemmedDB feature with --feature.""")
+    parser.add_argument("--run_features_only", action="store_true", default=False,
+                        help="Run classifier with only features specified by --features")
+    parser.add_argument("--classifier", type=str, choices=["svc", "nusvc", "sgd", "platt_svc"],
+                        default="svc", help="Classifier to use.")
+    parser.add_argument("--kernel", type=str, choices=["linear", "rbf", "poly"],
+                        default="linear", help="SVC kernel to use.")
+    parser.add_argument("--loss_func", type=str, choices=["hinge", "log"],
+                        default="hinge", help="SGD loss function.")
+    parser.add_argument("--grid_search", action="store_true", default=False,
+                        help="Run grid search to optimize parameters.")
+    parser.add_argument("--features", type=str, default="all", nargs="*",
+                        choices=["len_feature", "cui_feature", "cui2_feature", "cui3_feature",
+                                 "dist_feature", "dist2_feature", "pred_feature",
+                                 "ind_feature", "novelty_feature",
+                                 "novelty2_feature", "all"],
+                        help="Features from SemmedDB to use.")
+    parser.add_argument("--filter_all_features", action="store_true", default=False,
+                        help="Retain only top 30 percent of features specified by --feature.")
+    parser.add_argument("--semmed_keep_percentage", type=int, default=10,
+                        help="Keep top n percent of SemmedDB features. default: 10")
+    parser.add_argument("--tfidf_keep_percentage", type=int, default=10,
+                        help="Keep top n percent of Tf-idf features. default: 10")
+    parser.add_argument("--comb_keep_percentage", type=int, default=10,
+                        help="Keep top n percent of combined features. default: 10")
+    parser.add_argument("--semmed_features_outfile", type=str, default=None,
+                        help="If not None, save SemMedDB features to outfile.")
+    parser.add_argument("--tfidf_features_outfile", type=str, default=None,
+                        help="If not None, save tf-idf features to outfile.")
+    parser.add_argument("--comb_features_outfile", type=str, default=None,
+                        help="If not None, save combination features to outfile.")
+    parser.add_argument("--save_comb_X", type=str, default=None,
+                        help="If not None, write combined dataset to outfile.")
+    args = parser.parse_args()
+    return args
 
 def timeit(method):
     '''
@@ -85,13 +135,18 @@ def run_classifier(X, y, classifier_str, kernel, loss_func, grid_search=False):
         if classifier_str == "nusvc":
             clf = NuSVC(nu=0.5, probability=False, kernel=kernel)
         if classifier_str == "sgd":
-            clf = SGDClassifier(loss=loss_func, penalty="l2", tol=1e-3, alpha=0.0001, random_state=8)
+            clf = SGDClassifier(loss=loss_func, penalty="l2", tol=1e-3,
+                                alpha=1e-4, random_state=8)
         if classifier_str == "svc":
-            clf = SVC(kernel=kernel)
+            clf = SVC(kernel=kernel, probability=False)
+        if classifier_str == "platt_svc":
+            clf = PlattScaledSVM(penalty="l2", tol=1e-3,
+                                 alpha=1e-4, random_state=8)
         folds = StratifiedKFold(n_splits=10, shuffle=True, random_state=1)
         scores = cross_val_score(clf, X, y, cv=folds, scoring='roc_auc')
         clf = clf.fit(X, y)
-        print("Num iter: {}".format(clf.n_iter_))
+        if classifier_str == "sgd":
+            print("Num iter: {}".format(clf.n_iter_))
         print("AUC: {:g} (+/- {:g})".format(scores.mean(), scores.std() * 2))
 
 def get_semmed_features(semmed_X, features, y):
@@ -137,54 +192,6 @@ def get_semmed_features(semmed_X, features, y):
     print(X.shape)
     return X
     
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--semmeddb_csv", type=str, required=True,
-                        help="CSV file containing SemmedDB features.")
-    parser.add_argument("--tfidf_csv", type=str, required=True,
-                        help="CSV file containing Tf-idf features.")
-    parser.add_argument("--run_semmed", action="store_true", default=False,
-                        help="Run SVM with SemmedDB features.")
-    parser.add_argument("--run_tfidf", action="store_true", default=False,
-                        help="Run SVM with Tf-idf features.")
-    parser.add_argument("--run_comb", action="store_true", default=False,
-                        help="""Run SVM with SemmedDB and Tf-idf features.
-                                Specify SemmedDB feature with --feature.""")
-    parser.add_argument("--run_features_only", action="store_true", default=False,
-                        help="Run classifier with only features specified by --features")
-    parser.add_argument("--classifier", type=str, choices=["svc", "nusvc", "sgd"],
-                        default="svc", help="Classifier to use.")
-    parser.add_argument("--kernel", type=str, choices=["linear", "rbf", "poly"],
-                        default="linear", help="SVC kernel to use.")
-    parser.add_argument("--loss_func", type=str, choices=["hinge", "log"],
-                        default="hinge", help="SGD loss function.")
-    parser.add_argument("--grid_search", action="store_true", default=False,
-                        help="Run grid search to optimize parameters.")
-    parser.add_argument("--features", type=str, default="all", nargs="*",
-                        choices=["len_feature", "cui_feature", "cui2_feature", "cui3_feature",
-                                 "dist_feature", "dist2_feature", "pred_feature",
-                                 "ind_feature", "novelty_feature",
-                                 "novelty2_feature", "all"],
-                        help="Features from SemmedDB to use.")
-    parser.add_argument("--filter_all_features", action="store_true", default=False,
-                        help="Retain only top 30 percent of features specified by --feature.")
-    parser.add_argument("--semmed_keep_percentage", type=int, default=10,
-                        help="Keep top n percent of SemmedDB features. default: 10")
-    parser.add_argument("--tfidf_keep_percentage", type=int, default=10,
-                        help="Keep top n percent of Tf-idf features. default: 10")
-    parser.add_argument("--comb_keep_percentage", type=int, default=10,
-                        help="Keep top n percent of combined features. default: 10")
-    parser.add_argument("--semmed_features_outfile", type=str, default=None,
-                        help="If not None, save SemMedDB features to outfile.")
-    parser.add_argument("--tfidf_features_outfile", type=str, default=None,
-                        help="If not None, save tf-idf features to outfile.")
-    parser.add_argument("--comb_features_outfile", type=str, default=None,
-                        help="If not None, save combination features to outfile.")
-    parser.add_argument("--save_comb_X", type=str, default=None,
-                        help="If not None, write combined dataset to outfile.")
-    args = parser.parse_args()
-    return args
-
 def main():
     args = parse_args()
 

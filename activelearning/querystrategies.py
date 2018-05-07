@@ -574,7 +574,6 @@ class MinMax(QueryStrategy):
         NNs = NearestNeighbors(n_neighbors=k, algorithm='brute',
                                metric='mahalanobis',
                                metric_params={'VI': inv_cov})
-                               #metric_params={'V': cov, 'VI': inv_cov})
         NNs.fit(unlabeled_x)
         neighbor_indices = NNs.kneighbors(return_distance=False)
         num_samples = neighbor_indices.shape[0]
