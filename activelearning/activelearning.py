@@ -1,14 +1,19 @@
-"""
-The ActiveLearningModel class. This class acts as an interface to 
-a machine-learning classifier instance (e.g. from scikit-learn), a
-QueryStrategy instance, and a Data instance.
-"""
-
 import numpy as np
-from sklearn import base, metrics, model_selection
+from sklearn import model_selection, metrics
 
 from .containers import Data
 from .querystrategies import QueryStrategy, SimpleMargin
+
+'''
+>>> from sklearn.svm import NuSVC
+>>> clf = NuSVC(nu= 0.46, probability=True)
+>>> qs = LeastConfidence(model_change=False)
+>>> learner = ActiveLearningModel(clf, qs)
+>>> train_x, test_x, train_y, test_y = read_data(datafile)
+>>> type(train_x)
+<class 'numpy.ndarray'>
+>>> scores = learner.run(train_x, test_x, train_y, test_y)
+'''
 
 
 class ActiveLearningModel(object):
@@ -22,7 +27,7 @@ class ActiveLearningModel(object):
         :param int random_state: Sets the random_state parameter of train_test_split.
         '''
         self.__check_args(classifier, query_strategy, U_proportion)
-        self.classifier = base.clone(classifier)
+        self.classifier = classifier
         self.query_strategy = query_strategy
         self.U_proportion = U_proportion
         self.random_state = random_state

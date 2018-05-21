@@ -2,6 +2,9 @@ import unittest
 import copy
 import numpy as np
 
+from sklearn import __version__
+sklearn_ver = __version__
+
 from activelearning.querystrategies import *
 from activelearning.activelearning import Data
 
@@ -118,7 +121,11 @@ class QueryStrategyTest(unittest.TestCase):
         qs_kwargs = {'metric': 'mahalanobis'}
         strategy = MinMax(**qs_kwargs)
         choice = strategy.query(*self.args)
-        self.assertEqual(choice, 0)
+        # A difference in sklearn versions cause a different result to be computed.
+        if sklearn_ver == "0.19.0":
+            self.assertEqual(choice, 0)
+        elif sklearn_ver == "0.18.1":
+            self.assertEqual(choice, 4)
         self.assertNotIn(np.NaN, strategy.scores)
 
     def test_minmax_query_mah_singular(self):

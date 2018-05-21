@@ -1,11 +1,3 @@
-#! /usr/bin/env python
-"""
-The active learning model driver script.  Reads the data, runs the active
-learning model, and saves the results. The machine learning model is hard-
-coded as an SVM using sklearn's SGDClassifier. See run_active_learner() for
-details.
-"""
-
 import os
 import sys
 import time
@@ -27,6 +19,7 @@ from sklearn.feature_selection import SelectPercentile, f_classif, chi2
 
 from activelearning import ActiveLearningModel
 from activelearning.querystrategies import *
+from activelearning.platt_svm import PlattScaledSVM
 
 
 class IllegalArgumentError(ValueError):
@@ -35,6 +28,78 @@ class IllegalArgumentError(ValueError):
     '''
     pass
 
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("query_strategy", action="store",
+                        choices = ["random", "margin", "simple_margin",
+                                   "entropy", "least_confidence", "lcb",
+                                   "lcb2", "d2c", "minmax", "density",
+                                   "combined"],
+                        help="Query strategy.")
+    parser.add_argument("trainfile", type=str, help="Training data filename")
+    parser.add_argument("--qs_kwargs", type=str, nargs='+', default=[],
+                        help="""Kwargs to pass to query strategy.
+                                Format: arg1=val22 [[arg2=val2] ...]""")
+    parser.add_argument("-i", "--iteration", type=int, default=1,
+                        help="""Iteration. Used for multiple runs.
+                                (default: 1)""")
+    parser.add_argument("-n", "--nfolds", type=int, default=10,
+                        help="""Number of cross-validation splits.
+                                n > 1. (default: 10)""")
+    parser.add_argument("-p", "--percentage", type=int, default=100,
+                        help="Top percentage of features to keep. default=100")
+    parser.add_argument("--save_ranked_features", type=str, default=None,
+                        help="If not None, save ranked features to outfile.")
+    parser.add_argument("--ndraws", type=int, default=None,
+                        help="""Number of update draws. If None,
+                                 ndraws = size of unlabelled set
+                                 (default: None)""")
+    parser.add_argument("--model_change", action="store_true", default=False,
+                        help="""Use model change. Only compatible
+                                with least_confidence, lcb, and lcb2.""")
+    parser.add_argument("--resultsdir", type=str, default="results", 
+                        help="""Base results directory to use.
+                                (default: results/)""")
+    parser.add_argument("--cvdir", type=str, default="cv_splits",
+                        help="""Where to store/read CV files.""")
+    parser.add_argument("--score_threshold", type=float, default=0.80,
+                        help="Target score for the active learner to acheive.")
+    parser.add_argument("--profile", action="store_true", default=False,
+                        help="""Whether to save memory profile information. If
+                                set, --save_profile_to must also be set.""") 
+    parser.add_argument("--save_profile_to", type=str, default=None,
+                        help="""Directory in which to save memory profile
+                                information. Must be set if --profile is set.""")
+    args = parser.parse_args()
+    check_args(args)
+    return args
+
+def check_args(args):
+    '''
+    Checks that command line arguments are valid.
+      - Number of CV folds must be greater than 1.
+      - Model change is not compatible with random, minmax, margin,
+          simple_margin, or id query strategies.
+      - Query strategy keyword arguments must be of the format:
+            key1=val1 [[key2=val2] ...]
+    :param argparse.Namespace args: Arguments as returned from parse_args().
+    '''
+    if args.nfolds < 2:
+        raise IllegalArgumentError("nfolds must be greater than 1.")
+    mc_strategies = ['entropy', 'least_confidence', 'lcb', 'lcb2']
+
+    if args.model_change is True:
+        warnings.warn("""Deprecation Warning: the --model_change option is deprecated. Use --qs_kwargs model_change=True instead.""")
+        if args.query_strategy not in mc_strategies:
+            raise IllegalArgumentError("""Model change only compatible with entropy, least_confidence, lcb, and lcb2""")
+
+    if not all([re.match(r'\w+=[\w\.\']+', arg) for arg in args.qs_kwargs]):
+        raise IllegalArgumentError("--qs_kwargs must be of the format arg1=val22 [[arg2=val2] ...]")
+
+    if args.profile is True:
+        if args.save_profile_to is None:
+            raise IllegalArgumentError("--profile and --save_profile_to must be set together.")
 
 def timeit(method):
     '''
@@ -219,26 +284,26 @@ def run_active_learner(cv_basepath, nfolds, ndraws,
         if model_change is True:
             qs_kwargs['model_change'] = model_change
         qs = get_query_strategy(qs_str, qs_kwargs)
-        if isinstance(qs, UncertaintySampler):
-            loss_func = "log"
-        else:
-            loss_func = "hinge"
         # random_state=i ensures that the algorithm shuffles the data the same
         # way across runs.
-        clf_kwargs = {"loss": loss_func, "penalty": "l2",
-                      "alpha": 1e-4, "random_state": i}
+        clf_kwargs = {"penalty": "l2", "alpha": 1e-4, "random_state": i}
         if sklearn_ver == "0.19.0":
             clf_kwargs.update({"tol": 1e-3})
         elif sklearn_ver == "0.18.1":
             clf_kwargs.update({"n_iter": 10})
-        clf = SGDClassifier(**clf_kwargs)
+        if isinstance(qs, UncertaintySampler) or isinstance(qs, CombinedSampler):
+            # Outputs probabilities, which are required by uncertainty sampling.
+            clf = PlattScaledSVM(**clf_kwargs)  
+        else:
+            clf = SGDClassifier(loss="hinge", **clf_kwargs)
         # random_state=i ensures that the data is split into L and U sets the
         # the same across runs with the same number of CV splits.
         learner = ActiveLearningModel(clf, qs, random_state=i)
         train_x, test_x, train_y, test_y = read_cv_files(cv_basepath, i + 1)
 
         if i == 0:
-            print("Loss Function: {}".format(loss_func), flush=True)
+            print("CLF: {}".format(clf))
+            print("Query Strategy: {}".format(qs))
             print("Train X/y: {}, {}".format(train_x.shape, train_y.shape), flush=True)
             print("Test X/y: {}, {}".format(test_x.shape, test_y.shape), flush=True)
 
@@ -254,78 +319,6 @@ def run_active_learner(cv_basepath, nfolds, ndraws,
         print('.', end='', flush=True)
     print('', flush=True)
     return all_scores, choice_orders
-
-def check_args(args):
-    '''
-    Checks that command line arguments are valid.
-      - Number of CV folds must be greater than 1.
-      - Model change is not compatible with random, minmax, margin,
-          simple_margin, or id query strategies.
-      - Query strategy keyword arguments must be of the format:
-            key1=val1 [[key2=val2] ...]
-    :param argparse.Namespace args: Arguments as returned from parse_args().
-    '''
-    if args.nfolds < 2:
-        raise IllegalArgumentError("nfolds must be greater than 1.")
-    mc_strategies = ['entropy', 'least_confidence', 'lcb', 'lcb2']
-
-    if args.model_change is True:
-        warnings.warn("""Deprecation Warning: the --model_change option is deprecated. Use --qs_kwargs model_change=True instead.""")
-        if args.query_strategy not in mc_strategies:
-            raise IllegalArgumentError("""Model change only compatible with entropy, least_confidence, lcb, and lcb2""")
-
-    if not all([re.match(r'\w+=[\w\.\']+', arg) for arg in args.qs_kwargs]):
-        raise IllegalArgumentError("--qs_kwargs must be of the format arg1=val22 [[arg2=val2] ...]")
-
-    if args.profile is True:
-        if args.save_profile_to is None:
-            raise IllegalArgumentError("--profile and --save_profile_to must be set together.")
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("query_strategy", action="store",
-                        choices = ["random", "margin", "simple_margin",
-                                   "entropy", "least_confidence", "lcb",
-                                   "lcb2", "d2c", "minmax", "density",
-                                   "combined"],
-                        help="Query strategy.")
-    parser.add_argument("trainfile", type=str, help="Training data filename")
-    parser.add_argument("--qs_kwargs", type=str, nargs='+', default=[],
-                        help="""Kwargs to pass to query strategy.
-                                Format: arg1=val22 [[arg2=val2] ...]""")
-    parser.add_argument("-i", "--iteration", type=int, default=1,
-                        help="""Iteration. Used for multiple runs.
-                                (default: 1)""")
-    parser.add_argument("-n", "--nfolds", type=int, default=10,
-                        help="""Number of cross-validation splits.
-                                n > 1. (default: 10)""")
-    parser.add_argument("-p", "--percentage", type=int, default=10,
-                        help="Top percentage of features to keep. default=10")
-    parser.add_argument("--save_ranked_features", type=str, default=None,
-                        help="If not None, save ranked features to outfile.")
-    parser.add_argument("--ndraws", type=int, default=None,
-                        help="""Number of update draws. If None,
-                                 ndraws = size of unlabelled set
-                                 (default: None)""")
-    parser.add_argument("--model_change", action="store_true", default=False,
-                        help="""Use model change. Only compatible
-                                with least_confidence, lcb, and lcb2.""")
-    parser.add_argument("--resultsdir", type=str, default="results", 
-                        help="""Base results directory to use.
-                                (default: results/)""")
-    parser.add_argument("--cvdir", type=str, default="cv_splits",
-                        help="""Where to store/read CV files.""")
-    parser.add_argument("--score_threshold", type=float, default=0.80,
-                        help="Target score for the active learner to acheive.")
-    parser.add_argument("--profile", action="store_true", default=False,
-                        help="""Whether to save memory profile information. If
-                                set, --save_profile_to must also be set.""") 
-    parser.add_argument("--save_profile_to", type=str, default=None,
-                        help="""Directory in which to save memory profile
-                                information. Must be set if --profile is set.""")
-    args = parser.parse_args()
-    check_args(args)
-    return args
 
 def main():
     args = parse_args()
@@ -438,7 +431,6 @@ def main():
         snapshot = tracemalloc.take_snapshot()
         snapshot_outfile = os.path.join(args.save_profile_to, "main_3.out")
         snapshot.dump(snapshot_outfile)
-
 
 if __name__ == '__main__':
     main()

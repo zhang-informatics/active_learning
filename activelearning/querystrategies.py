@@ -1,9 +1,3 @@
-"""
-The query strategies. All strategies inhereit from the 
-QueryStrategy base class. Uncertainty sampling strategies
-inherit from UncertaintySampler.
-"""
-
 import sys
 import warnings
 import numpy as np
@@ -166,6 +160,7 @@ class CombinedSampler(QueryStrategy):
         return "Combined Sampler: qs1: {0}; qs2 {1}".format(str(self.qs1),
                                                             str(self.qs2))
 
+    # TODO: Remove. No longer used.
     def _compute_alpha(self, *args):
         '''
         alpha = |L|/|U_0|
@@ -184,7 +179,7 @@ class CombinedSampler(QueryStrategy):
         Dynamic beta is computed according to the ratio of number of labeled
         to unlabeled samples.
 
-        beta = a * (|L|/|U|) 
+        beta = |U|/|L|
         :returns: beta
         :rtype: float        
         '''
@@ -193,7 +188,8 @@ class CombinedSampler(QueryStrategy):
             alpha = self._compute_alpha(*args)
         else:
             alpha = self.alpha
-        beta = alpha * (args.L.x.shape[0] / args.U.x.shape[0])
+#        beta = (args.U.x.shape[0] / args.L.x.shape[0])
+        beta = 2 * (args.U.x.shape[0] / args.L.x.shape[0])
         return beta
 
     def _normalize_scores(self, scores):
@@ -472,13 +468,13 @@ class LeastConfidenceDynamicBias(UncertaintySampler):
         :rtype: numpy.ndarray
         '''
         args = self.get_args(*args)
-        if self.U_0_size < 0:
+        if self.U_0_size < 0:  # Set U_0_size if unset (-1)
             self.U_0_size = args.U.x.shape[0]
         pp = sum(args.L.y) / args.L.y.shape[0]
         w_u = args.L.y.shape[0] / self.U_0_size
         w_b = 1 - w_u
         p_max = w_b * (1 - pp) + w_u * 0.5
-        probs = np.max(args.clf.predict_proba(args.U.x), axis=1)
+        probs = args.clf.predict_proba(args.U.x)[:, 1]
         scores = np.where(probs < p_max,        # If
                           probs / p_max,        # Then
                           (1 - probs) / p_max)  # Else
@@ -574,6 +570,7 @@ class MinMax(QueryStrategy):
         NNs = NearestNeighbors(n_neighbors=k, algorithm='brute',
                                metric='mahalanobis',
                                metric_params={'VI': inv_cov})
+                               #metric_params={'V': cov, 'VI': inv_cov})
         NNs.fit(unlabeled_x)
         neighbor_indices = NNs.kneighbors(return_distance=False)
         num_samples = neighbor_indices.shape[0]

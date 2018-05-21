@@ -1,7 +1,3 @@
-"""
-A container class for the data used by ActiveLearningModel.
-"""
-
 class Data(object):
     '''
     Data container object to hold features and labels.
