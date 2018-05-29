@@ -19,7 +19,7 @@ See also [Example.ipynb](Example.ipynb) for example code.
 ### Installing
 Get the code: `git clone https://github.com/zhang-informatics/active_learning`
 
-Download the data from: [http://hdl.handle.net/11299/194965](http://hdl.handle.net/11299/194965)
+Download the data from: [https://doi.org/10.13020/D6S38M](https://doi.org/10.13020/D6S38M)
 
 To see usage instructions:
 ```
@@ -27,23 +27,28 @@ python3 al.py -h
 ```
 
 ### Feature Extraction
-To extract the same feature set as was used in the paper:
+To extract the same feature set as was used in the paper, first separate the full data file by PREDICATE_GROUP into the substance interactions
+and clinical medicine predications. Then extract and combine the tf-idf and CUI features. For example, for the substance interaction predications:
 ```
 python scripts/python/semmed_2_features.py --feature_type tfidf --keep_percentage 42 data/substance_interactions/annotated_predications.csv \
-					   data/substance_interactions/features/tfidf_n11_features.csv
+					   data/substance_interactions/train/tfidf_n11_features.csv
 python scripts/python/semmed_2_features.py --feature_type semmed --keep_percentage 100 data/substance_interactions/annotated_predications.csv \
-					   data/substance_interactions/features/semmed_features.csv
-python scripts/python/svm.py --semmeddb_csv data/substance_interactions/features/semmed_features.csv \
-			     --tfidf_csv data/substance_interactions/features/tfidf_n11_features.csv \
-			     --tfidf_keep_percentage 12 --run_tfidf --run_comb --classifier sgd --loss_func hinge \
-			     --features cui_feature --comb_keep_percentage 65 --save_comb_X data/substance_interactions/features/tfidf_n11_cui_features.csv
+					   data/substance_interactions/train/semmed_features.csv
+python scripts/python/svm.py --semmeddb_csv data/substance_interactions/train/semmed_features.csv \
+			     --tfidf_csv data/substance_interactions/train/tfidf_n11_features.csv \
+			     --tfidf_keep_percentage 12 --run_comb --classifier sgd --loss_func hinge \
+			     --features cui_feature --comb_keep_percentage 65 \
+			     --save_comb_X data/substance_interactions/train/tfidf_n11_cui_features.csv
 ```
-The last command will output two AUCs. The first, for tfidf features only, should be **0.830**. The second, for tfidf and CUI features, should be **0.835**.
+The last command should output an AUC of **0.835**. 
+
+The commands are the same for the clinical medicine data except for the path to the data files and
+for scripts/python/svm.py set `--tfidf_keep_percentage 13` and `--comb_keep_percentage 66`. This command should output an AUC of **0.804**.
 
 ### Running Experiments
 To run an active learning experiment, e.g.
 ```
-python al.py --nfolds 10 --cvdir cv_data --resultsdir results/ random data/substance_interactions/features/tfidf_n11_cui.csv
+python al.py --nfolds 10 --cvdir cv_data --resultsdir results/ random data/substance_interactions/train/tfidf_n11_cui.csv
 ```
 `--nfolds 10`: Evaluated using 10-fold cross validation.
 
@@ -53,7 +58,7 @@ python al.py --nfolds 10 --cvdir cv_data --resultsdir results/ random data/subst
 
 `random`: Run the passive learning baseline query strategy.
 
-`data/substance_interactions/features/tfidf_n11_cui.csv`: Use the features specified in this file (1gram tf-idf and subject/object CUI features).
+`data/substance_interactions/train/tfidf_n11_cui.csv`: Use the features specified in this file (1gram tf-idf and subject/object CUI features).
 
 This command will create the directory `cv_data/` if it does not exist or use the existing CV splits if it does exist.
 It will also create the directory `results/` if it does not exist. The script will abort if the specified 
