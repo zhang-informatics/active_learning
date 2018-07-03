@@ -4,7 +4,7 @@ The precision can be improved by filtering out incorrect predications using a ma
 training a classification model requires obtaining expert-annotated data. This study evaluates the use of active learning,
 a method for reducing the annotation cost for machine learning tasks, on training a classifier to filter incorrect SemRep output.
 
-Article link: **TBD**
+Article link: [https://doi.org/10.1093/jamiaopen/ooy021](https://doi.org/10.1093/jamiaopen/ooy021)
 
 ## Getting Started
 These instructions will show you how to get the code running on your system in order to recreate the results from the paper.
@@ -19,7 +19,7 @@ See also [Example.ipynb](Example.ipynb) for example code.
 ### Installing
 Get the code: `git clone https://github.com/zhang-informatics/active_learning`
 
-Download the data from: [https://doi.org/10.13020/D6S38M](https://doi.org/10.13020/D6S38M)
+Download the data from: [https://doi.org/10.5061/dryad.k4b688s](https://doi.org/10.5061/dryad.k4b688s)
 
 To see usage instructions:
 ```
