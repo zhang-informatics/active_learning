@@ -4,7 +4,9 @@ The precision can be improved by filtering out incorrect predications using a ma
 training a classification model requires obtaining expert-annotated data. This study evaluates the use of active learning,
 a method for reducing the annotation cost for machine learning tasks, on training a classifier to filter incorrect SemRep output.
 
-Article link: [https://doi.org/10.1093/jamiaopen/ooy021](https://doi.org/10.1093/jamiaopen/ooy021)
+## Citation
+
+Vasilakes J, Rizvi R, Melton GB, Pakhomov S, Zhang R. Evaluating active learning methods for annotating semantic predications. JAMIA Open. 2018;1(2):275-282.
 
 ## Getting Started
 These instructions will show you how to get the code running on your system in order to recreate the results from the paper.
